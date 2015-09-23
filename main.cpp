@@ -36,6 +36,8 @@ AnalogIn ADC_DIV2_D3V3(P0_24);
 AnalogIn ADC_DIV2_BAT(P1_30);
 AnalogIn ADC_DIV2_5V(P1_31);
 
+DigitalIn OVER_CURR(P1_14);  //(仮)
+
 I2CSlave I2CS_PINGPONG(P0_27, P0_28);
 
 Timer TimAdcInterval;
@@ -52,6 +54,7 @@ typedef enum {
     EVT_CMD_V,      //T電源電圧測定コマンド受信
     EVT_CMD_U,      //USB VBUSコマンド受信
     EVT_CMD_B,      //バッテリー有効化コマンド受信
+    EVT_CMD_C,      //電流チェックコマンド受信
     EVT_CMD_RELAY,  //コマンドをTZ1へ中継
 }   CMD_EVT;
 
@@ -104,34 +107,34 @@ static void cmd_Ooxx(char o, int xx)
             GPIO_7 = hi_lo;
             break;
         case 8:
-            GPIO_8 = 0;
+            GPIO_8 = hi_lo;
             break;
         case 9:
-            GPIO_9 = 0;
+            GPIO_9 = hi_lo;
             break;
         case 16:
-            GPIO_16 = 0;
+            GPIO_16 = hi_lo;
             break;
         case 17:
-            GPIO_17 = 0;
+            GPIO_17 = hi_lo;
             break;
         case 18:
-            GPIO_18 = 0;
+            GPIO_18 = hi_lo;
             break;
         case 19:
-            GPIO_19 = 0;
+            GPIO_19 = hi_lo;
             break;
         case 20:
-            GPIO_20 = 0;
+            GPIO_20 = hi_lo;
             break;
         case 21:
-            GPIO_21 = 0;
+            GPIO_21 = hi_lo;
             break;
         case 22:
-            GPIO_22 = 0;
+            GPIO_22 = hi_lo;
             break;
         case 23:
-            GPIO_23 = 0;
+            GPIO_23 = hi_lo;
             break;
     }
 }
@@ -173,17 +176,22 @@ static void cmd_Axxx(int xxx)
     ADV_EN = xxx;
 }
 
-/* B00/B001: CHG_ENを設定する */
+/* B000/B001: CHG_ENを設定する */
 static void cmd_Bxxx(int xxx)
 {
     CHG_EN = xxx;
+}
+
+/* C000: OVER_CURRENTを読む */
+static int cmd_C000(void)
+{
+    return OVER_CURR;
 }
 
 /** コマンド受信 **/
 static bool recvCommand(CMD_BUF *buff, CMD_EVT *evt, int *param1, char *param2)
 {
     int c;
-    char **pp;
     
     if (param1 == NULL) {
         return false;
@@ -203,32 +211,28 @@ static bool recvCommand(CMD_BUF *buff, CMD_EVT *evt, int *param1, char *param2)
             switch (cmd_buf[0]) {
                 case 'P':
                     *evt = EVT_CMD_P;
-                    *param1 = strtol((char *)&cmd_buf[1], pp, 10);
-                    if (**pp == '\0') {
-                        if ((*param1 != 0) && (*param1 != 1)) {
-                            return false;
-                        }
-                    } else {
+                    *param1 = strtol((char *)&cmd_buf[1], NULL, 10);
+                    if ((*param1 != 0) && (*param1 != 1)) {
                         return false;
                     }
                     break;
                 case 'R':
                     *evt = EVT_CMD_R;
-                    *param1 = strtol((char *)&cmd_buf[1], pp, 10);
+                    *param1 = strtol((char *)&cmd_buf[1], NULL, 10);
                     if ((*param1 != 0) && (*param1 != 1)) {
                         return false;
                     }
                     break;
                 case 'E':
                     *evt = EVT_CMD_E;
-                    *param1 = strtol((char *)&cmd_buf[1], pp, 10);
+                    *param1 = strtol((char *)&cmd_buf[1], NULL, 10);
                     if ((*param1 != 0) && (*param1 != 1)) {
                         return false;
                     }
                     break;
                 case 'O':
                     *evt = EVT_CMD_O;
-                    *param1 = strtol((char *)&cmd_buf[2], pp, 10);
+                    *param1 = strtol((char *)&cmd_buf[2], NULL, 10);
                     switch (*param1)  {
                         case 7:
                         case 8:
@@ -246,36 +250,43 @@ static bool recvCommand(CMD_BUF *buff, CMD_EVT *evt, int *param1, char *param2)
                             return false;
                     }
                     *param2 = cmd_buf[1];
-                    if ((*param2 != 'L') || (*param2 != 'H')) {
+                    if ((*param2 != 'L') && (*param2 != 'H')) {
                         //invalid parameter
                         return false;
                     }
                     break;
                 case 'A':
                     *evt = EVT_CMD_A;
-                    *param1 = strtol((char *)&cmd_buf[1], pp, 10);
+                    *param1 = strtol((char *)&cmd_buf[1], NULL, 10);
                     if ((*param1 != 0) && (*param1 != 1)) {
                         return false;
                     }
                     break;
                 case 'V':
                     *evt = EVT_CMD_V;
-                    *param1 = strtol((char *)&cmd_buf[1], pp, 10);
+                    *param1 = strtol((char *)&cmd_buf[1], NULL, 10);
                     if ((*param1 < 1) || (*param1 > 3)) {
                         return false;
                     }
                     break;
                 case 'U':
                     *evt = EVT_CMD_U;
-                    *param1 = strtol((char *)&cmd_buf[1], pp, 10);
+                    *param1 = strtol((char *)&cmd_buf[1], NULL, 10);
                     if ((*param1 != 0) && (*param1 != 1)) {
                         return false;
                     }
                     break;
                 case 'B':
                     *evt = EVT_CMD_B;
-                    *param1 = strtol((char *)&cmd_buf[1], pp, 10);
+                    *param1 = strtol((char *)&cmd_buf[1], NULL, 10);
                     if ((*param1 != 0) && (*param1 != 1)) {
+                        return false;
+                    }
+                    break;
+                case 'C':
+                    *evt = EVT_CMD_C;
+                    *param1 = strtol((char *)&cmd_buf[1], NULL, 10);
+                    if (*param1 != 0) {
                         return false;
                     }
                     break;
@@ -341,7 +352,7 @@ int main() {
                 case EVT_CMD_V:
                     ret = cmd_Vxxx(param1);
                     if (ret != -1) {
-                        uart_pc.printf("{cmd=\"V%03d\",\"volt\":%d}\r\n", param1, ret);
+                        uart_pc.printf("{\"cmd\":\"V%03d\",\"volt\":%d}\r\n", param1, ret);
                     }
                     break;
                 case EVT_CMD_U:
@@ -351,6 +362,10 @@ int main() {
                 case EVT_CMD_B:
                     cmd_Bxxx(param1);
                     uart_pc.printf("DONE\r\n");
+                    break;
+                case EVT_CMD_C:
+                    ret = cmd_C000();
+                    uart_pc.printf("{\"cmd\":\"C000\",\"current\":%d}\r\n", ret);
                     break;
                 case EVT_CMD_RELAY:
                     //TZ1へコマンドをリレー
@@ -366,15 +381,15 @@ int main() {
         /* ADC計測 */
         if (TimAdcInterval.read_ms() >= ADC_INTERVAL) {
             TimAdcInterval.start();
-            put_dat_buf(&adc_TZ_VSYS_buff, (uint32_t)ADC_DIV2_VSYS.read_u16());
-            put_dat_buf(&adc_TZ_D3V3_buff, (uint32_t)ADC_DIV2_D3V3.read_u16());
-            put_dat_buf(&adc_TZ_BATT_buff, (uint32_t)ADC_DIV2_BAT.read_u16());
+            put_dat_buf(&adc_TZ_VSYS_buff, (uint32_t)ADC_DIV2_VSYS.read_u16() >> 4);
+            put_dat_buf(&adc_TZ_D3V3_buff, (uint32_t)ADC_DIV2_D3V3.read_u16() >> 4);
+            put_dat_buf(&adc_TZ_BATT_buff, (uint32_t)ADC_DIV2_BAT.read_u16() >> 4);
         }
         
         /* I2C PingPong */
         switch (I2CS_PINGPONG.receive()) {
             case I2CSlave::ReadAddressed:
-                I2CS_PINGPONG.write("PONG", 5);
+                I2CS_PINGPONG.write("PONG", 4);
                 break;
             case I2CSlave::WriteAddressed:
                 I2CS_PINGPONG.read(pingpong_buf, sizeof(pingpong_buf));
