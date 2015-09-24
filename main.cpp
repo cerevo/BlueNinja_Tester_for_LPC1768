@@ -312,6 +312,9 @@ int main() {
     
     char pingpong_buf[10];
     
+    /* USBìdåπOFF */
+    cmd_Uxxx(1);
+    
     uart_pc.baud(9600);
     uart_pc.printf("*** TZ1 TESTER ***\r\n");
     
